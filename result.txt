@@ -14,7 +14,7 @@
 	/**
 	 * Reconstruct from Parcel
 	 */
-	public {className}(Parcel in) {
+	public Profile(Parcel in) {
         id = in.readString();
         loyaltyNumber = in.readString();
         loyaltyTier = in.readString();

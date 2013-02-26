@@ -68,7 +68,7 @@ TEMPLATE = """
 	/**
 	 * Reconstruct from Parcel
 	 */
-	public {className}(Parcel in) {
+	public {{className}}(Parcel in) {
 {{read}}
 	}
 
@@ -101,14 +101,16 @@ class Generator(object):
     def __init__(self):
         self.template = ""
         self.indentation = ""
+        self.tab = ""
         self.className = ""
         self.members = []
         self.adapters = []
         self.defaultAdapter = None;
 
-    def setTemplate(self, template, indentation):
+    def setTemplate(self, template, indentation, tab):
         self.template = template;
         self.indentation = indentation;
+        self.tab = tab;
 
     def setClassName(self, className):
         self.className = className;
@@ -150,36 +152,52 @@ class Generator(object):
                             + "is found.\n")
 
         # Add indentation.
-        sep = ""
-        for i in range(len(read)):
-            read[i] = sep + self.indentation + read[i].strip()
-            sep = "\n"
-
-        sep = ""
-        for i in range(len(write)):
-            write[i] = sep + self.indentation + write[i].strip()
-            sep = "\n"
+        read = self.__formatIndentation(read)
+        write = self.__formatIndentation(write)
 
         out = out.replace("{{read}}", "".join(read))
         out = out.replace("{{write}}", "".join(write))
 
         print out
 
+    def __formatIndentation(self, lines):
+        """Responsible for making corrections for indentation"""
+        curSep = ""
+        sep = "\n"
+        additionalIndentation = 0
+
+        for i in range(len(lines)):
+            lines[i] = curSep + self.indentation \
+                    + (self.tab * additionalIndentation) + lines[i].strip()
+            curSep = sep
+
+            if lines[i].find("{") > -1:
+                additionalIndentation += 1
+
+            if lines[i].find("}") > -1:
+                additionalIndentation -= 1
+
+            if additionalIndentation < 0:
+                additionalIndentation = 0
+
+        return lines
+
 class SimpleGenerator(Generator):
     """Sets up all of the adapters in constructor"""
     def __init__(self):
         super(SimpleGenerator, self).__init__()
-        self.setTemplate(TEMPLATE, " " * 8)
+        self.setTemplate(TEMPLATE, " " * 8, " " * 4)
 
         self.setDefaultAdapter(ParcelableAdapter())
 
         for i in range(len(SUPPORTED_TYPES)):
-            self.addAdapter(SupportedTypeAdapter(SUPPORTED_TYPES[i],
+            self.addAdapter(NativeTypeAdapter(re.compile(
+                    SUPPORTED_TYPES[i].replace("[", "\\[").replace("]", "\\]")),
                     SUPPORTED_TYPES_METHOD_NAMES[i]))
 
         self.addAdapter(PrimitiveBooleanAdapter())
 
-class Adapter:
+class Adapter(object):
     @abc.abstractmethod
     def getSupportedType(self):
         "Returns supported dataType as a compiled regex."
@@ -197,28 +215,38 @@ class Adapter:
         (out.write.*). don't worry about indentation."""
         return
 
-class ParcelableAdapter(Adapter):
+class TemplateAdapter(Adapter):
+    """Use this adapter serves as a base class for anything that simply needs
+    to put dataType and name into a template."""
+
+    def __init__(self, supportedType, readTemplate, writeTemplate):
+        """supportedType is expected to be compiled regex"""
+        self.supportedType = supportedType
+        self.readTemplate = readTemplate
+        self.writeTemplate = writeTemplate
+
     def getSupportedType(self):
-        return re.compile(r".*")
+        return self.supportedType
 
     def genRead(self, dataType, name):
-        return dataType + " = in.readParcelable(" + name \
-                + ".class.getClassLoader());"
+        return self.readTemplate \
+                .replace("{{dataType}}", dataType).replace("{{name}}", name)
 
     def genWrite(self, dataType, name):
-        return "out.writeParcelable(" + name + ", 0);"
+        return self.writeTemplate \
+                .replace("{{dataType}}", dataType).replace("{{name}}", name)
 
-class SupportedTypeAdapter(Adapter):
-    """Use this adapter for any of the primitive types that's supposed by
-    Parcel by default."""
+class NativeTypeAdapter(Adapter):
+    """Use this adapter for any of the primitive types that's natively
+    supported by Parcel."""
 
     def __init__(self, supportedType, typeMethodNameSuffix):
+        """supportedType is expected to be compiled regex"""
         self.supportedType = supportedType
         self.typeMethodNameSuffix = typeMethodNameSuffix
 
     def getSupportedType(self):
-        return re.compile( \
-                self.supportedType.replace("[", "\\[").replace("]", "\\]"))
+        return self.supportedType
 
     def genRead(self, dataType, name):
         return name + " = in.read" + self.typeMethodNameSuffix + "();"
@@ -226,24 +254,42 @@ class SupportedTypeAdapter(Adapter):
     def genWrite(self, dataType, name):
         return "out.write" + self.typeMethodNameSuffix + "(" + name + ");"
 
-class PrimitiveBooleanAdapter(Adapter):
+class ParcelableAdapter(TemplateAdapter):
+    """Use this adapter for Parcelable type."""
+
+    SUPPORTED_TYPE = re.compile(r".*")
+    READ_TEMPLATE = """{{dataType}} = in.readParcelable({{name}}.class.getClassLoader());"""
+    WRITE_TEMPLATE = """out.writeParcelable({{name}}, 0);"""
+
+    def __init__(self):
+        super(ParcelableAdapter, self).__init__(self.SUPPORTED_TYPE,
+                self.READ_TEMPLATE, self.WRITE_TEMPLATE)
+
+class PrimitiveBooleanAdapter(TemplateAdapter):
     """Use this adapter for primitive boolean type."""
 
+    SUPPORTED_TYPE = re.compile(r"boolean")
     READ_TEMPLATE = """boolean[] {{name}}Array = new boolean[1];
             in.readBooleanArray({{name}}Array);
 		    {{name}} = {{name}}Array[0];"""
     WRITE_TEMPLATE = """out.writeBooleanArray(new boolean[] { {{name}} });"""
 
-    def getSupportedType(self):
-        return re.compile(r"boolean")
+    def __init__(self):
+        super(PrimitiveBooleanAdapter, self).__init__(self.SUPPORTED_TYPE,
+                self.READ_TEMPLATE, self.WRITE_TEMPLATE)
 
-    def genRead(self, dataType, name):
-        return self.READ_TEMPLATE \
-                .replace("{{dataType}}", dataType).replace("{{name}}", name)
+class PrimitiveBooleanAdapter(TemplateAdapter):
+    """Use this adapter for primitive boolean type."""
 
-    def genWrite(self, dataType, name):
-        return self.WRITE_TEMPLATE \
-                .replace("{{dataType}}", dataType).replace("{{name}}", name)
+    SUPPORTED_TYPE = re.compile(r"boolean")
+    READ_TEMPLATE = """boolean[] {{name}}Array = new boolean[1];
+            in.readBooleanArray({{name}}Array);
+		    {{name}} = {{name}}Array[0];"""
+    WRITE_TEMPLATE = """out.writeBooleanArray(new boolean[] { {{name}} });"""
+
+    def __init__(self):
+        super(PrimitiveBooleanAdapter, self).__init__(self.SUPPORTED_TYPE,
+                self.READ_TEMPLATE, self.WRITE_TEMPLATE)
 
 def main():
     lines = sys.stdin.readlines()
