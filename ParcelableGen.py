@@ -43,14 +43,6 @@ import abc
 CLASS_REGEX = re.compile(r"^\s*public (static |)(abstract |)class\s+(\S+)\s+.*")
 MEMBER_REGEX = re.compile(r"^\s*(public|private)\s+(\S+)\s+(\S+)\;.*")
 
-SUPPORTED_TYPES = ["byte", "double", "float", "int", "long", "String",
-        "java.lang.String", "boolean[]", "byte[]", "char[]", "double[]", 
-        "float[]", "int[]", "long[]", "String[]"]
-
-SUPPORTED_TYPES_METHOD_NAMES = ["Byte", "Double", "Float", "Int", "Long",
-        "String", "String", "BooleanArray", "ByteArray", "CharArray", "DoubleArray",
-        "FloatArray", "IntArray", "longArray", "StringArray"]
-
 PREFERED_LIST_TYPE = "ArrayList"
 
 ENUM_TYPE_NAMING_SCHEME = re.compile(r".+Type")
@@ -204,16 +196,26 @@ class Generator(object):
 
 class ConfiguredGenerator(Generator):
     """Sets up all of the adapters in constructor"""
+
+    SUPPORTED_TYPES = ["byte", "double", "float", "int", "long", "String",
+            "java.lang.String", "boolean[]", "byte[]", "char[]", "double[]", 
+            "float[]", "int[]", "long[]", "String[]"]
+
+    SUPPORTED_TYPES_METHOD_NAMES = ["Byte", "Double", "Float", "Int", "Long",
+            "String", "String", "BooleanArray", "ByteArray", "CharArray",
+            "DoubleArray", "FloatArray", "IntArray", "longArray", "StringArray"]
+
     def __init__(self):
         super(ConfiguredGenerator, self).__init__()
         self.setTemplate(TEMPLATE, " " * 8, " " * 4)
 
         self.setDefaultAdapter(ParcelableAdapter())
 
-        for i in range(len(SUPPORTED_TYPES)):
+        for i in range(len(self.SUPPORTED_TYPES)):
             self.addAdapter(NativeTypeAdapter(re.compile(
-                    SUPPORTED_TYPES[i].replace("[", "\\[").replace("]", "\\]")),
-                    SUPPORTED_TYPES_METHOD_NAMES[i]))
+                    self.SUPPORTED_TYPES[i] \
+                    .replace("[", "\\[").replace("]", "\\]")),
+                    self.SUPPORTED_TYPES_METHOD_NAMES[i]))
 
         self.addAdapter(PrimitiveBooleanAdapter())
         self.addAdapter(ListAdapter(PREFERED_LIST_TYPE))
@@ -244,21 +246,22 @@ class TemplateAdapter(Adapter):
     """Use this adapter serves as a base class for anything that simply needs
     to put dataType and name into a template."""
 
-    def __init__(self, supportedType, readTemplate, writeTemplate):
-        """supportedType is expected to be compiled regex"""
-        self.supportedType = supportedType
-        self.readTemplate = readTemplate
-        self.writeTemplate = writeTemplate
+    @abc.abstractmethod
+    def getReadTemplate(self):
+        """Return read code template."""
+        return
 
-    def getSupportedType(self):
-        return self.supportedType
+    @abc.abstractmethod
+    def getWriteTemplate(self):
+        """Return write code template."""
+        return
 
     def genRead(self, dataType, name):
-        return self.readTemplate \
+        return self.getReadTemplate() \
                 .replace("{{dataType}}", dataType).replace("{{name}}", name)
 
     def genWrite(self, dataType, name):
-        return self.writeTemplate \
+        return self.getWriteTemplate() \
                 .replace("{{dataType}}", dataType).replace("{{name}}", name)
 
 class NativeTypeAdapter(Adapter):
@@ -283,26 +286,28 @@ class ParcelableAdapter(TemplateAdapter):
     """Use this adapter for Parcelable type. This adapter really should be
     used as default adapter."""
 
-    SUPPORTED_TYPE = re.compile(r".*Parcelable")
-    READ_TEMPLATE = """{{dataType}} = in.readParcelable({{name}}.class.getClassLoader());"""
-    WRITE_TEMPLATE = """out.writeParcelable({{name}}, 0);"""
+    def getSupportedType(self):
+        return re.compile(r".*Parcelable")
 
-    def __init__(self):
-        super(ParcelableAdapter, self).__init__(self.SUPPORTED_TYPE,
-                self.READ_TEMPLATE, self.WRITE_TEMPLATE)
+    def getReadTemplate(self):
+        return """{{dataType}} = in.readParcelable({{name}}.class.getClassLoader());"""
+
+    def getWriteTemplate(self):
+        return """out.writeParcelable({{name}}, 0);"""
 
 class PrimitiveBooleanAdapter(TemplateAdapter):
     """Use this adapter for primitive boolean type."""
 
-    SUPPORTED_TYPE = re.compile(r"boolean")
-    READ_TEMPLATE = """boolean[] {{name}}Array = new boolean[1];
+    def getSupportedType(self):
+        return re.compile(r"boolean")
+
+    def getReadTemplate(self):
+        return """boolean[] {{name}}Array = new boolean[1];
             in.readBooleanArray({{name}}Array);
             {{name}} = {{name}}Array[0];"""
-    WRITE_TEMPLATE = """out.writeBooleanArray(new boolean[] { {{name}} });"""
 
-    def __init__(self):
-        super(PrimitiveBooleanAdapter, self).__init__(self.SUPPORTED_TYPE,
-                self.READ_TEMPLATE, self.WRITE_TEMPLATE)
+    def getWriteTemplate(self):
+        return """out.writeBooleanArray(new boolean[] { {{name}} });"""
 
 class ListAdapter(Adapter):
     """Use this adapter for any of the List types."""
@@ -345,27 +350,35 @@ class EnumAdapter(TemplateAdapter):
     """Use this adapter for primitive enum type. Note that it depends on a
     consistent enum type naming scheme to identify enums."""
 
-    READ_TEMPLATE = """String {{name}}Str = in.readString();
+    def __init__(self, enumTypeNamingScheme):
+        self.enumTypeNamingScheme = enumTypeNamingScheme
+
+    def getSupportedType(self):
+        return self.enumTypeNamingScheme
+
+    def getReadTemplate(self):
+        return """String {{name}}Str = in.readString();
             if ({{name}}Str != null) {
                 {{name}} = {{dataType}}.valueOf({{name}}Str);
             } else {
                 {{name}} = null;
             }"""
-    WRITE_TEMPLATE = """if ({{name}} != null) {
+
+    def getWriteTemplate(self):
+        return """if ({{name}} != null) {
                 out.writeString({{name}}.name());
             } else {
                 out.writeString(null);
             }"""
 
-    def __init__(self, enumTypeNamingScheme):
-        super(EnumAdapter, self).__init__(enumTypeNamingScheme,
-                self.READ_TEMPLATE, self.WRITE_TEMPLATE)
-
 class CalendarAdapter(TemplateAdapter):
     """Use this adapter for Calendar type."""
 
-    SUPPORTED_TYPE = re.compile(r"(.+\.|)(Calendar)")
-    READ_TEMPLATE = """String {{name}}TimeZoneStr = in.readString();
+    def getSupportedType(self):
+        return re.compile(r"(.+\.|)(Calendar)")
+
+    def getReadTemplate(self):
+        return """String {{name}}TimeZoneStr = in.readString();
             if ({{name}}TimeZoneStr != null) {
                 {{name}} = Calendar.getInstance();
                 {{name}}.setTimeZone(TimeZone.getTimeZone({{name}}TimeZoneStr));
@@ -373,51 +386,43 @@ class CalendarAdapter(TemplateAdapter):
             } else {
                 {{name}} = null;
             }"""
-    WRITE_TEMPLATE = """if ({{name}} != null) {
+
+    def getWriteTemplate(self):
+        return """if ({{name}} != null) {
                 out.writeString({{name}}.getTimeZone().getID());
                 out.writeLong({{name}}.getTimeInMillis());
             } else {
                 out.writeString(null);
             }"""
 
-    def __init__(self):
-        super(CalendarAdapter, self).__init__(self.SUPPORTED_TYPE,
-                self.READ_TEMPLATE, self.WRITE_TEMPLATE)
-
-class GregorianCalendarAdapter(TemplateAdapter):
+class GregorianCalendarAdapter(CalendarAdapter):
     """Use this adapter for GregorianCalenar type."""
 
-    SUPPORTED_TYPE = re.compile(r"(.+\.|)(GregorianCalendar)")
-    READ_TEMPLATE = """String {{name}}TimeZoneStr = in.readString();
+    def getSupportedType(self):
+        return re.compile(r"(.+\.|)(GregorianCalendar)")
+
+    def getReadTemplate(self):
+        return """String {{name}}TimeZoneStr = in.readString();
             if ({{name}}TimeZoneStr != null) {
                 {{name}} = new GregorianCalendar(TimeZone.getTimeZone({{name}}TimeZoneStr));
                 {{name}}.setTimeInMillis(in.readLong());
             } else {
                 {{name}} = null;
             }"""
-    WRITE_TEMPLATE = """if ({{name}} != null) {
-                out.writeString({{name}}.getTimeZone().getID());
-                out.writeLong({{name}}.getTimeInMillis());
-            } else {
-                out.writeString(null);
-            }"""
-
-    def __init__(self):
-        super(GregorianCalendarAdapter, self).__init__(self.SUPPORTED_TYPE,
-                self.READ_TEMPLATE, self.WRITE_TEMPLATE)
 
 class XMLGregorianCalendarAdapter(TemplateAdapter):
     """Use this adapter for XMLGregorianCalenar type."""
 
-    SUPPORTED_TYPE = re.compile(r"(.+\.|)(XMLGregorianCalendar)")
-    READ_TEMPLATE = """try {
+    def getSupportedType(self):
+        return re.compile(r"(.+\.|)(XMLGregorianCalendar)")
+
+    def getReadTemplate(self):
+        return """try {
                 {{name}} = javax.xml.datatype.DatatypeFactory.newInstance().newXMLGregorianCalendar(in.readString());
             } catch (DatatypeConfigurationException dce) {}"""
-    WRITE_TEMPLATE = """out.writeString({{name}}.toString());"""
 
-    def __init__(self):
-        super(XMLGregorianCalendarAdapter, self).__init__(self.SUPPORTED_TYPE,
-                self.READ_TEMPLATE, self.WRITE_TEMPLATE)
+    def getWriteTemplate(self):
+        return """out.writeString({{name}}.toString());"""
 
 def main():
     lines = sys.stdin.readlines()
