@@ -212,9 +212,7 @@ class ConfiguredGenerator(Generator):
         self.setDefaultAdapter(ParcelableAdapter())
 
         for i in range(len(self.SUPPORTED_TYPES)):
-            self.addAdapter(NativeTypeAdapter(re.compile(
-                    self.SUPPORTED_TYPES[i] \
-                    .replace("[", "\\[").replace("]", "\\]")),
+            self.addAdapter(NativeTypeAdapter(self.SUPPORTED_TYPES[i],
                     self.SUPPORTED_TYPES_METHOD_NAMES[i]))
 
         self.addAdapter(PrimitiveBooleanAdapter())
@@ -268,13 +266,14 @@ class NativeTypeAdapter(Adapter):
     """Use this adapter for any of the primitive types that's natively
     supported by Parcel."""
 
-    def __init__(self, supportedType, typeMethodNameSuffix):
+    def __init__(self, supportedTypeStr, typeMethodNameSuffix):
         """supportedType is expected to be compiled regex"""
-        self.supportedType = supportedType
+        self.supportedTypeStr = supportedTypeStr
         self.typeMethodNameSuffix = typeMethodNameSuffix
 
     def getSupportedType(self):
-        return self.supportedType
+        return re.compile(
+                self.supportedTypeStr.replace("[", "\\[").replace("]", "\\]"))
 
     def genRead(self, dataType, name):
         return name + " = in.read" + self.typeMethodNameSuffix + "();"
