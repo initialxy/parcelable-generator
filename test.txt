@@ -21,3 +21,8 @@ public class Profile implements Parcelable {
 
 	private OutOfDate outOfDate;
 
+    private TestType someEnum;
+
+    private Calendar calendar1;
+    private GregorianCalendar calendar2;
+    private XMLGregorianCalendar calendar3;
