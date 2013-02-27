@@ -82,11 +82,11 @@ TEMPLATE = """
 
     private static class Creator implements Parcelable.Creator<{{className}}> {
         public {{className}} createFromParcel(Parcel source) {
-            return new {className}(source);
+            return new {{className}}(source);
         }
 
         public {{className}}[] newArray(int size) {
-            return new {className}[size];
+            return new {{className}}[size];
         }
     }
 
@@ -310,7 +310,7 @@ class ParcelableAdapter(TemplateAdapter):
         return self.SUPPORTED_TYPE
 
     def getReadTemplate(self):
-        return """{{dataType}} = in.readParcelable({{name}}.class.getClassLoader());"""
+        return """{{name}} = in.readParcelable({{dataType}}.class.getClassLoader());"""
 
     def getWriteTemplate(self):
         return """out.writeParcelable({{name}}, 0);"""
