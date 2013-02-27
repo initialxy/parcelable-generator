@@ -197,11 +197,11 @@ class Generator(object):
 class ConfiguredGenerator(Generator):
     """Sets up all of the adapters in constructor"""
 
-    SUPPORTED_TYPES = ["byte", "double", "float", "int", "long", "String",
+    NATIVE_TYPES = ["byte", "double", "float", "int", "long", "String",
             "java.lang.String", "boolean[]", "byte[]", "char[]", "double[]", 
             "float[]", "int[]", "long[]", "String[]"]
 
-    SUPPORTED_TYPES_METHOD_NAMES = ["Byte", "Double", "Float", "Int", "Long",
+    NATIVE_TYPES_METHOD_NAMES = ["Byte", "Double", "Float", "Int", "Long",
             "String", "String", "BooleanArray", "ByteArray", "CharArray",
             "DoubleArray", "FloatArray", "IntArray", "longArray", "StringArray"]
 
@@ -211,9 +211,9 @@ class ConfiguredGenerator(Generator):
 
         self.setDefaultAdapter(ParcelableAdapter())
 
-        for i in range(len(self.SUPPORTED_TYPES)):
-            self.addAdapter(NativeTypeAdapter(self.SUPPORTED_TYPES[i],
-                    self.SUPPORTED_TYPES_METHOD_NAMES[i]))
+        for i in range(len(self.NATIVE_TYPES)):
+            self.addAdapter(NativeTypeAdapter(self.NATIVE_TYPES[i],
+                    self.NATIVE_TYPES_METHOD_NAMES[i]))
 
         self.addAdapter(PrimitiveBooleanAdapter())
         self.addAdapter(ListAdapter(PREFERED_LIST_TYPE))
@@ -241,8 +241,8 @@ class Adapter(object):
         return
 
 class TemplateAdapter(Adapter):
-    """Use this adapter serves as a base class for anything that simply needs
-    to put dataType and name into a template."""
+    """Extend this adapter for anything that simply needs to put dataType and
+    name into a template."""
 
     @abc.abstractmethod
     def getReadTemplate(self):
@@ -267,13 +267,13 @@ class NativeTypeAdapter(Adapter):
     supported by Parcel."""
 
     def __init__(self, supportedTypeStr, typeMethodNameSuffix):
-        """supportedType is expected to be compiled regex"""
-        self.supportedTypeStr = supportedTypeStr
+        """supportedTypeStr is expected to a string."""
+        self.supportedType = re.compile(
+                supportedTypeStr.replace("[", "\\[").replace("]", "\\]"))
         self.typeMethodNameSuffix = typeMethodNameSuffix
 
     def getSupportedType(self):
-        return re.compile(
-                self.supportedTypeStr.replace("[", "\\[").replace("]", "\\]"))
+        return self.supportedType
 
     def genRead(self, dataType, name):
         return name + " = in.read" + self.typeMethodNameSuffix + "();"
@@ -285,8 +285,10 @@ class ParcelableAdapter(TemplateAdapter):
     """Use this adapter for Parcelable type. This adapter really should be
     used as default adapter."""
 
+    SUPPORTED_TYPE = re.compile(r".*Parcelable")
+
     def getSupportedType(self):
-        return re.compile(r".*Parcelable")
+        return self.SUPPORTED_TYPE
 
     def getReadTemplate(self):
         return """{{dataType}} = in.readParcelable({{name}}.class.getClassLoader());"""
@@ -297,8 +299,10 @@ class ParcelableAdapter(TemplateAdapter):
 class PrimitiveBooleanAdapter(TemplateAdapter):
     """Use this adapter for primitive boolean type."""
 
+    SUPPORTED_TYPE = re.compile(r"boolean")
+
     def getSupportedType(self):
-        return re.compile(r"boolean")
+        return self.SUPPORTED_TYPE
 
     def getReadTemplate(self):
         return """boolean[] {{name}}Array = new boolean[1];
@@ -311,6 +315,8 @@ class PrimitiveBooleanAdapter(TemplateAdapter):
 class ListAdapter(Adapter):
     """Use this adapter for any of the List types."""
 
+    SUPPORTED_TYPE = re.compile(r".*List")
+
     GENERICS_REGEX = re.compile(r"\s*(\S+)\<(.+)\>.*")
 
     READ_TEMPLATE = """{{name}} = new {{listType}}<{{genericType}}>();
@@ -321,7 +327,7 @@ class ListAdapter(Adapter):
         self.preferredListType = preferredListType
 
     def getSupportedType(self):
-        return re.compile(r".*List")
+        return self.SUPPORTED_TYPE
 
     def genRead(self, dataType, name):
         genericType = ""
@@ -350,6 +356,7 @@ class EnumAdapter(TemplateAdapter):
     consistent enum type naming scheme to identify enums."""
 
     def __init__(self, enumTypeNamingScheme):
+        """enumTypeNamingScheme is expected to be a compiled regex."""
         self.enumTypeNamingScheme = enumTypeNamingScheme
 
     def getSupportedType(self):
@@ -370,16 +377,31 @@ class EnumAdapter(TemplateAdapter):
                 out.writeString(null);
             }"""
 
-class CalendarAdapter(TemplateAdapter):
-    """Use this adapter for Calendar type."""
+class SimpleTypeNameAdapter(TemplateAdapter):
+    """Extend this adapter for anything that doesn't need complicated type
+    matching regex. It will help matching against package name too. eg. If you
+    pass in Calendar, it will match against Calendar as well as
+    java.util.Calendar"""
+
+    def __init__(self, supportedTypeStr):
+        """supportedTypeStr is expected to be a string."""
+        self.supportedType = re.compile( \
+                r"(.+\.|)({supportedTypeStr})" \
+                .format(supportedTypeStr = supportedTypeStr))
 
     def getSupportedType(self):
-        return re.compile(r"(.+\.|)(Calendar)")
+        return self.supportedType
+
+class CalendarAdapter(SimpleTypeNameAdapter):
+    """Use this adapter for Calendar type."""
+
+    def __init__(self):
+        super(CalendarAdapter, self).__init__("Calendar")
 
     def getReadTemplate(self):
         return """String {{name}}TimeZoneStr = in.readString();
             if ({{name}}TimeZoneStr != null) {
-                {{name}} = Calendar.getInstance();
+                {{name}} = {{dataType}}.getInstance();
                 {{name}}.setTimeZone(TimeZone.getTimeZone({{name}}TimeZoneStr));
                 {{name}}.setTimeInMillis(in.readLong());
             } else {
@@ -397,31 +419,43 @@ class CalendarAdapter(TemplateAdapter):
 class GregorianCalendarAdapter(CalendarAdapter):
     """Use this adapter for GregorianCalenar type."""
 
-    def getSupportedType(self):
-        return re.compile(r"(.+\.|)(GregorianCalendar)")
+    def __init__(self):
+        super(CalendarAdapter, self).__init__("GregorianCalendar")
 
     def getReadTemplate(self):
         return """String {{name}}TimeZoneStr = in.readString();
             if ({{name}}TimeZoneStr != null) {
-                {{name}} = new GregorianCalendar(TimeZone.getTimeZone({{name}}TimeZoneStr));
+                {{name}} = new {{dataType}}(TimeZone.getTimeZone({{name}}TimeZoneStr));
                 {{name}}.setTimeInMillis(in.readLong());
             } else {
                 {{name}} = null;
             }"""
 
-class XMLGregorianCalendarAdapter(TemplateAdapter):
+class StringSerializableTypeAdapter(TemplateAdapter):
+    """Extend this abstract adapter for anything that can be serialized with
+    its own toString() method."""
+
+    def getWriteTemplate(self):
+        return """out.writeString({{name}}.toString());"""
+
+class XMLGregorianCalendarAdapter(SimpleTypeNameAdapter, StringSerializableTypeAdapter):
     """Use this adapter for XMLGregorianCalenar type."""
 
-    def getSupportedType(self):
-        return re.compile(r"(.+\.|)(XMLGregorianCalendar)")
+    def __init__(self):
+        super(XMLGregorianCalendarAdapter, self).__init__("XMLGregorianCalendar")
 
     def getReadTemplate(self):
         return """try {
                 {{name}} = javax.xml.datatype.DatatypeFactory.newInstance().newXMLGregorianCalendar(in.readString());
             } catch (DatatypeConfigurationException dce) {}"""
 
-    def getWriteTemplate(self):
-        return """out.writeString({{name}}.toString());"""
+class StringConstructorAdapter(SimpleTypeNameAdapter,
+        StringSerializableTypeAdapter):
+    """Use this adapter for anyting that can be deserialized from String by
+    using its constructor."""
+
+    def getReadTemplate(self):
+        return """{{name}} = new {{dataType}}(in.readString());"""
 
 def main():
     lines = sys.stdin.readlines()
