@@ -56,9 +56,14 @@
         } else {
             calendar2 = null;
         }
-        try {
-            calendar3 = javax.xml.datatype.DatatypeFactory.newInstance().newXMLGregorianCalendar(in.readString());
-        } catch (DatatypeConfigurationException dce) {}
+        String calendar3Str = in.readString();
+        if (calendar3Str != null) {
+            try {
+                calendar3 = javax.xml.datatype.DatatypeFactory.newInstance().newXMLGregorianCalendar(in.readString());
+            } catch (DatatypeConfigurationException dce) {}
+        } else {
+            calendar3 = null;
+        }
     }
 
     @Override
@@ -80,11 +85,7 @@
         out.writeParcelable(rentalPreferences, 0);
         out.writeParcelable(rewardPreferences, 0);
         out.writeParcelable(outOfDate, 0);
-        if (someEnum != null) {
-            out.writeString(someEnum.name());
-        } else {
-            out.writeString(null);
-        }
+        out.writeString(someEnum != null ? someEnum.name() : null);
         if (calendar1 != null) {
             out.writeString(calendar1.getTimeZone().getID());
             out.writeLong(calendar1.getTimeInMillis());
@@ -97,7 +98,7 @@
         } else {
             out.writeString(null);
         }
-        out.writeString(calendar3.toString());
+        out.writeString(calendar3 != null ? calendar3.toString() : null);
     }
 
     @Override
