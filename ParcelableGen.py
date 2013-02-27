@@ -152,15 +152,13 @@ class Generator(object):
         write = self.__formatIndentation(write)
 
         out = self.template.replace("{{className}}", self.className)
-        out = out.replace("{{read}}", "".join(read))
-        out = out.replace("{{write}}", "".join(write))
+        out = out.replace("{{read}}", "\n".join(read))
+        out = out.replace("{{write}}", "\n".join(write))
 
         print out
 
     def __formatIndentation(self, lines):
         """Responsible for making corrections for indentation"""
-        curSep = ""
-        sep = "\n"
         additionalTabs = 0
 
         for i in range(len(lines)):
@@ -190,9 +188,8 @@ class Generator(object):
             additionalTabs += openingBracketNum
             additionalTabs -= closingBracketNum
 
-            lines[i] = curSep + self.indentation \
-                    + (self.tab * curAdditionalTabs) + lines[i]
-            curSep = sep
+            lines[i] = self.indentation + (self.tab * curAdditionalTabs) \
+                    + lines[i]
 
         return lines
 
