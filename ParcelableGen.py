@@ -411,8 +411,8 @@ class SimpleTypeNameAdapter(TemplateAdapter):
 class CalendarAdapter(SimpleTypeNameAdapter):
     """Use this adapter for Calendar type."""
 
-    def __init__(self):
-        super(CalendarAdapter, self).__init__("Calendar")
+    def __init__(self, supportedTypeStr = "Calendar"):
+        super(CalendarAdapter, self).__init__(supportedTypeStr)
 
     def getReadTemplate(self):
         return """String {{name}}TimeZoneStr = in.readString();
@@ -435,8 +435,8 @@ class CalendarAdapter(SimpleTypeNameAdapter):
 class GregorianCalendarAdapter(CalendarAdapter):
     """Use this adapter for GregorianCalenar type."""
 
-    def __init__(self):
-        super(CalendarAdapter, self).__init__("GregorianCalendar")
+    def __init__(self, supportedTypeStr = "GregorianCalendar"):
+        super(GregorianCalendarAdapter, self).__init__(supportedTypeStr)
 
     def getReadTemplate(self):
         return """String {{name}}TimeZoneStr = in.readString();
