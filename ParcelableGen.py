@@ -328,7 +328,7 @@ class PrimitiveBooleanAdapter(TemplateAdapter):
     def getWriteTemplate(self):
         return """out.writeBooleanArray(new boolean[] { {{name}} });"""
 
-class ListAdapter(Adapter):
+class ListAdapter(TemplateAdapter):
     """Use this adapter for any of the List types."""
 
     SUPPORTED_TYPE = re.compile(r".*List")
@@ -337,7 +337,6 @@ class ListAdapter(Adapter):
 
     READ_TEMPLATE = """{{name}} = new {{listType}}<{{genericType}}>();
             in.readList({{name}}, {{genericType}}.class.getClassLoader());"""
-    WRITE_TEMPLATE = """out.writeList({{name}});"""
 
     def __init__(self, preferredListType):
         self.preferredListType = preferredListType
@@ -363,9 +362,14 @@ class ListAdapter(Adapter):
                 .replace("{{listType}}", listType) \
                 .replace("{{genericType}}", genericType)
 
-    def genWrite(self, dataType, name):
-        return self.WRITE_TEMPLATE.replace("{{name}}", name) \
-                .replace("{{dataType}}", dataType)
+    def getReadTemplate(self):
+        """This implementation is useless, because genRead() is implemeted. I
+        just want to override all of the abstract methods, because that makes
+        me happy as a Java guy."""
+        return ""
+
+    def getWriteTemplate(self):
+        return """out.writeList({{name}});"""
 
 class EnumAdapter(TemplateAdapter):
     """Use this adapter for primitive enum type. Note that it depends on a
