@@ -40,10 +40,12 @@ import sys
 import re
 import abc
 
+VERSION = "1.1"
+
 CLASS_REGEX = re.compile(r"^\s*public (static |)(abstract |)class\s+(\S+)\s+.*")
 MEMBER_REGEX = re.compile(r"^\s*(public|private)\s+(\S+)\s+(\S+)\;.*")
 
-PREFERED_LIST_TYPE = "ArrayList"
+PREFERRED_LIST_TYPE = "ArrayList"
 
 ENUM_TYPE_NAMING_SCHEME = re.compile(r".+Type")
 
@@ -135,6 +137,7 @@ class Generator(object):
                     isAdapterFound = True
                     read += a.genRead(m[0], m[1]).split("\n")
                     write += a.genWrite(m[0], m[1]).split("\n")
+                    break
 
             if not isAdapterFound:
                 if self.defaultAdapter is not None:
@@ -205,7 +208,7 @@ class ConfiguredGenerator(Generator):
             "DoubleArray", "FloatArray", "IntArray", "longArray", "StringArray"]
 
     VALUE_OF_TYPES = ["Byte", "Short", "Integer", "Long", "Float", "Double",
-            "Double", "Char"]
+            "Boolean", "Char"]
 
     CONSTRUCTOR_TYPES = ["BigDecimal", "BigInteger"]
 
@@ -220,17 +223,17 @@ class ConfiguredGenerator(Generator):
                     self.NATIVE_TYPES_METHOD_NAMES[i]))
 
         self.addAdapter(PrimitiveBooleanAdapter())
-        self.addAdapter(ListAdapter(PREFERED_LIST_TYPE))
+        self.addAdapter(ListAdapter(PREFERRED_LIST_TYPE))
         self.addAdapter(EnumAdapter(ENUM_TYPE_NAMING_SCHEME))
         self.addAdapter(CalendarAdapter())
         self.addAdapter(GregorianCalendarAdapter())
         self.addAdapter(XMLGregorianCalendarAdapter())
 
         for t in self.VALUE_OF_TYPES:
-            self.addAdapter(ValueOfAdapter(i))
+            self.addAdapter(ValueOfAdapter(t))
 
         for t in self.CONSTRUCTOR_TYPES:
-            self.addAdapter(StringConstructorAdapter(i))
+            self.addAdapter(StringConstructorAdapter(t))
 
 class Adapter(object):
     @abc.abstractmethod
@@ -457,8 +460,8 @@ class StringSerializableTypeAdapter(TemplateAdapter):
 class XMLGregorianCalendarAdapter(SimpleTypeNameAdapter, StringSerializableTypeAdapter):
     """Use this adapter for XMLGregorianCalenar type."""
 
-    def __init__(self):
-        super(XMLGregorianCalendarAdapter, self).__init__("XMLGregorianCalendar")
+    def __init__(self, supportedTypeStr = "XMLGregorianCalendar"):
+        super(XMLGregorianCalendarAdapter, self).__init__(supportedTypeStr)
 
     def getReadTemplate(self):
         return """String {{name}}Str = in.readString();
