@@ -40,7 +40,7 @@ import sys
 import re
 import abc
 
-VERSION = "1.1"
+VERSION = "1.2"
 
 CLASS_REGEX = re.compile(r"^\s*public (static |)(abstract |)class\s+(\S+)\s+.*")
 MEMBER_REGEX = re.compile(r"^\s*(public|private)\s+(\S+)\s+(\S+)\;.*")
@@ -467,7 +467,7 @@ class XMLGregorianCalendarAdapter(SimpleTypeNameAdapter, StringSerializableTypeA
         return """String {{name}}Str = in.readString();
                 if ({{name}}Str != null) {
                     try {
-                        {{name}} = javax.xml.datatype.DatatypeFactory.newInstance().newXMLGregorianCalendar(in.readString());
+                        {{name}} = javax.xml.datatype.DatatypeFactory.newInstance().newXMLGregorianCalendar({{name}}Str);
                     } catch (DatatypeConfigurationException dce) {}
                 } else {
                     {{name}} = null;
@@ -481,7 +481,7 @@ class StringConstructorAdapter(SimpleTypeNameAdapter,
     def getReadTemplate(self):
         return """String {{name}}Str = in.readString();
                 if ({{name}}Str != null) {
-                    {{name}} = new {{dataType}}(in.readString());
+                    {{name}} = new {{dataType}}({{name}}Str);
                 } else {
                     {{name}} = null;
                 }"""
@@ -494,7 +494,7 @@ class ValueOfAdapter(SimpleTypeNameAdapter,
     def getReadTemplate(self):
         return """String {{name}}Str = in.readString();
                 if ({{name}}Str != null) {
-                    {{name}} = {{dataType}}.valueOf(in.readString());
+                    {{name}} = {{dataType}}.valueOf({{name}}Str);
                 } else {
                     {{name}} = null;
                 }"""
